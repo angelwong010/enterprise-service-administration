@@ -20,7 +20,9 @@ public class UserMapper {
                 .id(kcUser.getId())
                 .name(buildName(kcUser))
                 .roles(roles != null ? roles : Collections.emptyList())
-                .tags(Collections.emptyList());
+                .tags(Collections.emptyList())
+                .emails(Collections.emptyList())
+                .phoneNumbers(Collections.emptyList());
 
         // Email from Keycloak
         if (kcUser.getEmail() != null) {

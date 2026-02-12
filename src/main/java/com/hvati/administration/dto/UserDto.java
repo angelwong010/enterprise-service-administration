@@ -1,5 +1,6 @@
 package com.hvati.administration.dto;
 
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import lombok.*;
 
 import java.util.List;
@@ -8,6 +9,7 @@ import java.util.List;
 @Builder
 @NoArgsConstructor
 @AllArgsConstructor
+@JsonIgnoreProperties(ignoreUnknown = true)
 public class UserDto {
     private String id;
     private String avatar;
@@ -22,6 +24,12 @@ public class UserDto {
     private String notes;
     private List<String> tags;
     private List<String> roles;
+
+    /**
+     * Only populated on user creation. Contains the temporary password
+     * that the user must change on first login.
+     */
+    private String temporaryPassword;
 
     @Data
     @Builder

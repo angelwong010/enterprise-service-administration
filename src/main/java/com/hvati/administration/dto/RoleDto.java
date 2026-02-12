@@ -1,5 +1,6 @@
 package com.hvati.administration.dto;
 
+import com.fasterxml.jackson.annotation.JsonProperty;
 import lombok.*;
 
 import java.util.List;
@@ -13,7 +14,10 @@ public class RoleDto {
     private String name;
     private String description;
     private int usersCount;
+
+    @JsonProperty("isActive")
     private boolean isActive;
+
     private String updatedAt;
     private List<String> permissions;
 }

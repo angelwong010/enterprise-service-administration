@@ -1,17 +1,25 @@
 package com.hvati.administration.controller;
 
+import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.hvati.administration.dto.TagDto;
 import com.hvati.administration.dto.UpdateUserRequest;
 import com.hvati.administration.dto.UserDto;
 import com.hvati.administration.service.TagService;
 import com.hvati.administration.service.UserService;
+import jakarta.annotation.PostConstruct;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.core.io.ClassPathResource;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
+import java.io.InputStream;
+import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 
+@Slf4j
 @RestController
 @RequestMapping("/api/apps/contacts")
 @RequiredArgsConstructor
@@ -19,6 +27,20 @@ public class UserController {
 
     private final UserService userService;
     private final TagService tagService;
+    private final ObjectMapper objectMapper;
+
+    private List<Map<String, String>> countriesCache = Collections.emptyList();
+
+    @PostConstruct
+    public void loadCountries() {
+        try {
+            InputStream is = new ClassPathResource("static/countries.json").getInputStream();
+            countriesCache = objectMapper.readValue(is, new TypeReference<>() {});
+            log.info("Loaded {} countries from static resource", countriesCache.size());
+        } catch (Exception e) {
+            log.warn("Could not load countries.json: {}", e.getMessage());
+        }
+    }
 
     // ---- Users ----
 
@@ -39,6 +61,9 @@ public class UserController {
 
     @PatchMapping("/contact")
     public ResponseEntity<UserDto> updateUser(@RequestBody UpdateUserRequest request) {
+        log.info("PATCH /contact received - id='{}', contact.id='{}'",
+                request.getId(),
+                request.getContact() != null ? request.getContact().getId() : "null");
         return ResponseEntity.ok(userService.updateUser(request.getId(), request.getContact()));
     }
 
@@ -57,9 +82,8 @@ public class UserController {
     // ---- Countries (static data) ----
 
     @GetMapping("/countries")
-    public ResponseEntity<List<Object>> getCountries() {
-        // Return empty list for now; can be populated with static JSON
-        return ResponseEntity.ok(List.of());
+    public ResponseEntity<List<Map<String, String>>> getCountries() {
+        return ResponseEntity.ok(countriesCache);
     }
 
     // ---- Tags ----

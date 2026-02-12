@@ -5,6 +5,7 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.keycloak.admin.client.resource.RealmResource;
 import org.keycloak.admin.client.resource.UserResource;
+import org.keycloak.representations.idm.CredentialRepresentation;
 import org.keycloak.representations.idm.RoleRepresentation;
 import org.keycloak.representations.idm.UserRepresentation;
 import org.springframework.stereotype.Service;
@@ -51,8 +52,24 @@ public class KeycloakUserService {
                 String locationPath = response.getLocation().getPath();
                 return locationPath.substring(locationPath.lastIndexOf('/') + 1);
             }
-            throw new RuntimeException("Failed to create user in Keycloak. Status: " + response.getStatus());
+            String errorBody = "";
+            try {
+                errorBody = response.readEntity(String.class);
+            } catch (Exception ignored) {}
+            log.error("Keycloak create user failed. Status: {}, Body: {}", response.getStatus(), errorBody);
+            throw new RuntimeException("Failed to create user in Keycloak. Status: " + response.getStatus() + ". Detail: " + errorBody);
         }
+    }
+
+    /**
+     * Set a temporary password for a user. The user will be forced to change it on first login.
+     */
+    public void setTemporaryPassword(String userId, String password) {
+        CredentialRepresentation credential = new CredentialRepresentation();
+        credential.setType(CredentialRepresentation.PASSWORD);
+        credential.setValue(password);
+        credential.setTemporary(true);
+        realmResource.users().get(userId).resetPassword(credential);
     }
 
     /**
@@ -91,7 +108,19 @@ public class KeycloakUserService {
     }
 
     /**
+     * Get all available realm roles (excluding Keycloak internal ones).
+     */
+    public List<RoleRepresentation> getAvailableRealmRoles() {
+        return realmResource.roles().list().stream()
+                .filter(r -> !r.getName().startsWith("default-roles-")
+                        && !r.getName().startsWith("uma_")
+                        && !r.getName().equals("offline_access"))
+                .collect(Collectors.toList());
+    }
+
+    /**
      * Assign realm roles to a user.
+     * Roles that do not exist in Keycloak are skipped with a warning.
      */
     public void assignRealmRoles(String userId, List<String> roleNames) {
         UserResource userResource = realmResource.users().get(userId);
@@ -105,12 +134,20 @@ public class KeycloakUserService {
             userResource.roles().realmLevel().remove(toRemove);
         }
 
-        // Assign new roles
+        // Assign new roles (skip roles that don't exist in Keycloak)
         if (roleNames != null && !roleNames.isEmpty()) {
-            List<RoleRepresentation> rolesToAdd = roleNames.stream()
-                    .map(name -> realmResource.roles().get(name).toRepresentation())
-                    .collect(Collectors.toList());
-            userResource.roles().realmLevel().add(rolesToAdd);
+            List<RoleRepresentation> rolesToAdd = new java.util.ArrayList<>();
+            for (String name : roleNames) {
+                try {
+                    RoleRepresentation role = realmResource.roles().get(name).toRepresentation();
+                    rolesToAdd.add(role);
+                } catch (jakarta.ws.rs.NotFoundException e) {
+                    log.warn("Realm role '{}' not found in Keycloak, skipping assignment", name);
+                }
+            }
+            if (!rolesToAdd.isEmpty()) {
+                userResource.roles().realmLevel().add(rolesToAdd);
+            }
         }
     }
 }

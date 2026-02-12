@@ -35,7 +35,7 @@ keycloak:
     server-url: https://auth-develop.hvati.cloud
     realm: hvati
     client-id: ${KC_CLIENT_ID:hvati-backend}
-    client-secret: ${KC_CLIENT_SECRET:change-me}
+    client-secret: ${KC_CLIENT_SECRET:}
 
 app:
   cors:

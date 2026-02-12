@@ -76,17 +76,25 @@ public class UserService {
 
     /**
      * Create a new user in Keycloak + local profile in DB.
+     * Generates a temporary password that the user must change on first login.
      */
     @Transactional
     public UserDto createUser() {
-        // Create minimal user in Keycloak
+        String uniqueId = UUID.randomUUID().toString().substring(0, 8);
+        String tempPassword = "Tmp-" + UUID.randomUUID().toString().substring(0, 12);
+
         UserRepresentation newUser = new UserRepresentation();
         newUser.setEnabled(true);
-        newUser.setUsername("new-user-" + System.currentTimeMillis());
-        newUser.setFirstName("");
-        newUser.setLastName("");
+        newUser.setUsername("user-" + uniqueId);
+        newUser.setFirstName("Nuevo");
+        newUser.setLastName("Usuario");
+        newUser.setEmail("placeholder-" + uniqueId + "@temp.local");
+        newUser.setEmailVerified(false);
 
         String keycloakId = keycloakUserService.createUser(newUser);
+
+        // Set temporary password (user must change on first login)
+        keycloakUserService.setTemporaryPassword(keycloakId, tempPassword);
 
         // Create local profile
         UserProfileEntity profile = UserProfileEntity.builder()
@@ -94,9 +102,11 @@ public class UserService {
                 .build();
         userProfileRepository.save(profile);
 
-        // Fetch the created user from Keycloak
+        // Fetch the created user and include temporary password in response
         UserRepresentation createdUser = keycloakUserService.getUserById(keycloakId);
-        return userMapper.toDto(createdUser, profile, Collections.emptyList());
+        UserDto dto = userMapper.toDto(createdUser, profile, Collections.emptyList());
+        dto.setTemporaryPassword(tempPassword);
+        return dto;
     }
 
     /**
@@ -104,6 +114,14 @@ public class UserService {
      */
     @Transactional
     public UserDto updateUser(String userId, UserDto userDto) {
+        log.info("updateUser called with userId='{}', userDto.id='{}'", userId, userDto != null ? userDto.getId() : "null");
+
+        // If userId is null/empty but userDto has an id, use that
+        if ((userId == null || userId.isBlank()) && userDto != null && userDto.getId() != null && !userDto.getId().isBlank()) {
+            userId = userDto.getId();
+            log.info("Using userDto.id as fallback: '{}'", userId);
+        }
+
         // Update Keycloak user
         UserRepresentation kcUser = keycloakUserService.getUserById(userId);
         if (userDto.getName() != null) {
@@ -116,18 +134,20 @@ public class UserService {
         }
         keycloakUserService.updateUser(userId, kcUser);
 
-        // Update roles if provided
+        // Update roles if provided (not null)
         if (userDto.getRoles() != null) {
+            log.info("Assigning roles to user {}: {}", userId, userDto.getRoles());
             keycloakUserService.assignRealmRoles(userId, userDto.getRoles());
         }
 
         // Update local profile
+        String finalUserId = userId;
         UserProfileEntity profile = userProfileRepository.findByKeycloakId(userId)
-                .orElseGet(() -> UserProfileEntity.builder().keycloakId(userId).build());
+                .orElseGet(() -> UserProfileEntity.builder().keycloakId(finalUserId).build());
 
         profile.setTitle(userDto.getTitle());
         profile.setCompany(userDto.getCompany());
-        profile.setBirthday(userDto.getBirthday() != null ? LocalDate.parse(userDto.getBirthday()) : null);
+        profile.setBirthday(parseBirthday(userDto.getBirthday()));
         profile.setAddress(userDto.getAddress());
         profile.setNotes(userDto.getNotes());
         profile.setAvatarUrl(userDto.getAvatar());
@@ -163,6 +183,26 @@ public class UserService {
         } catch (Exception e) {
             log.error("Error deleting user {}: {}", userId, e.getMessage());
             return false;
+        }
+    }
+
+    /**
+     * Parse birthday string from frontend.
+     * Accepts ISO datetime (e.g. "1956-11-22T00:00:00.000-06:00") or plain date ("1956-11-22").
+     */
+    private LocalDate parseBirthday(String birthday) {
+        if (birthday == null || birthday.isBlank()) {
+            return null;
+        }
+        try {
+            // If it contains 'T', it's an ISO datetime — extract just the date part
+            if (birthday.contains("T")) {
+                return LocalDate.parse(birthday.substring(0, birthday.indexOf('T')));
+            }
+            return LocalDate.parse(birthday);
+        } catch (Exception e) {
+            log.warn("Could not parse birthday '{}': {}", birthday, e.getMessage());
+            return null;
         }
     }
 }
