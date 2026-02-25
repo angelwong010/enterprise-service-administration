@@ -62,4 +62,17 @@ public class ClientController {
     public ResponseEntity<List<PriceListDto>> getPriceLists() {
         return ResponseEntity.ok(clientService.getAllPriceLists());
     }
+
+    /**
+     * Create a price list by name, or return existing one if name already exists.
+     * Used for bulk product import when the Excel has a price column whose header is the list name.
+     */
+    @PostMapping("/price-lists")
+    public ResponseEntity<PriceListDto> createPriceList(@RequestBody java.util.Map<String, String> body) {
+        String name = body != null ? body.get("name") : null;
+        if (name == null || name.isBlank()) {
+            return ResponseEntity.badRequest().build();
+        }
+        return ResponseEntity.ok(clientService.findOrCreatePriceListByName(name));
+    }
 }

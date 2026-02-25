@@ -119,6 +119,24 @@ public class ClientService {
                 .collect(Collectors.toList());
     }
 
+    /**
+     * Find a price list by name, or create it if it does not exist.
+     */
+    @Transactional
+    public PriceListDto findOrCreatePriceListByName(String name) {
+        if (name == null || name.isBlank()) {
+            return null;
+        }
+        String trimmed = name.trim();
+        return priceListRepository.findByNameIgnoreCase(trimmed)
+                .map(clientMapper::toPriceListDto)
+                .orElseGet(() -> {
+                    PriceListEntity e = PriceListEntity.builder().name(trimmed).build();
+                    e = priceListRepository.save(e);
+                    return clientMapper.toPriceListDto(e);
+                });
+    }
+
     private ClientDto toDtoWithOptionalSummary(ClientEntity c, boolean withSummary) {
         if (!withSummary) {
             return clientMapper.toClientDto(c);

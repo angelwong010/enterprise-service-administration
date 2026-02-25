@@ -8,4 +8,6 @@ import java.util.UUID;
 
 @Repository
 public interface PriceListRepository extends JpaRepository<PriceListEntity, UUID> {
+
+    java.util.Optional<PriceListEntity> findByNameIgnoreCase(String name);
 }

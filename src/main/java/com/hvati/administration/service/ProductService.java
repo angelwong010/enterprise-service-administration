@@ -20,6 +20,7 @@ import java.util.stream.Collectors;
 public class ProductService {
 
     private final ProductRepository productRepository;
+    private final ProductPriceRepository productPriceRepository;
     private final CategoryRepository categoryRepository;
     private final BrandRepository brandRepository;
     private final CategoryService categoryService;
@@ -31,7 +32,10 @@ public class ProductService {
 
     @Transactional(readOnly = true)
     public List<ProductDto> getAll(boolean withPricesAndStock) {
-        return productRepository.findAllWithCategoryAndBrand().stream()
+        List<ProductEntity> list = withPricesAndStock
+                ? productRepository.findAllWithCategoryBrandAndPrices()
+                : productRepository.findAllWithCategoryAndBrand();
+        return list.stream()
                 .map(p -> productMapper.toProductDto(p, withPricesAndStock, false))
                 .collect(Collectors.toList());
     }
@@ -40,15 +44,17 @@ public class ProductService {
     public List<ProductDto> search(String q, boolean withPricesAndStock) {
         if (q == null || q.isBlank()) return getAll(withPricesAndStock);
         String query = q.trim();
-        return productRepository.findByNameContainingIgnoreCaseOrSkuContainingIgnoreCaseOrBarcodeContainingIgnoreCase(query, query, query)
-                .stream()
+        List<ProductEntity> list = withPricesAndStock
+                ? productRepository.searchWithCategoryBrandAndPrices(query)
+                : productRepository.findByNameContainingIgnoreCaseOrSkuContainingIgnoreCaseOrBarcodeContainingIgnoreCase(query, query, query);
+        return list.stream()
                 .map(p -> productMapper.toProductDto(p, withPricesAndStock, false))
                 .collect(Collectors.toList());
     }
 
     @Transactional(readOnly = true)
     public ProductDto getById(UUID id) {
-        ProductEntity p = productRepository.findByIdWithCategoryAndBrand(id)
+        ProductEntity p = productRepository.findByIdWithCategoryBrandPricesAndStocks(id)
                 .orElseThrow(() -> new IllegalArgumentException("Producto no encontrado: " + id));
         ProductDto dto = productMapper.toProductDto(p, true, true);
         List<StockMovementEntity> movements = stockMovementRepository.findByProductIdOrderByCreatedAtDesc(id, PageRequest.of(0, 20));
@@ -58,6 +64,40 @@ public class ProductService {
 
     @Transactional
     public ProductDto create(ProductDto dto) {
+        log.info("[ProductService.create] product name={}", dto.getName());
+
+        // Log incoming DTO for carga masiva
+        if (dto.getPrices() == null) {
+            log.info("[ProductService.create] product_prices: dto.prices is NULL");
+        } else {
+            log.info("[ProductService.create] product_prices: dto.prices size={}", dto.getPrices().size());
+            for (int i = 0; i < dto.getPrices().size(); i++) {
+                ProductPriceItemDto pr = dto.getPrices().get(i);
+                log.info("[ProductService.create]   price[{}] priceListId={}, price={}, currency={}",
+                        i, pr.getPriceListId(), pr.getPrice(), pr.getCurrency());
+            }
+        }
+        if (dto.getLocationStocks() == null) {
+            log.info("[ProductService.create] product_location_stock: dto.locationStocks is NULL");
+        } else {
+            log.info("[ProductService.create] product_location_stock: dto.locationStocks size={}", dto.getLocationStocks().size());
+            for (int i = 0; i < dto.getLocationStocks().size(); i++) {
+                ProductLocationStockDto ls = dto.getLocationStocks().get(i);
+                log.info("[ProductService.create]   locationStock[{}] locationId={}, quantity={}, minQuantity={}",
+                        i, ls.getLocationId(), ls.getQuantity(), ls.getMinQuantity());
+            }
+        }
+        if (dto.getVariants() == null) {
+            log.info("[ProductService.create] product_variants: dto.variants is NULL");
+        } else {
+            log.info("[ProductService.create] product_variants: dto.variants size={}", dto.getVariants().size());
+            for (int i = 0; i < dto.getVariants().size(); i++) {
+                ProductVariantDto v = dto.getVariants().get(i);
+                log.info("[ProductService.create]   variant[{}] sku={}, quantity={}, options={}",
+                        i, v.getSku(), v.getQuantity(), v.getOptions() != null ? v.getOptions().size() : 0);
+            }
+        }
+
         ProductEntity p = new ProductEntity();
         mapDtoToProduct(dto, p);
         p.setId(null);
@@ -65,37 +105,56 @@ public class ProductService {
         p.setLocationStocks(new ArrayList<>());
         p.setVariants(new ArrayList<>());
         final ProductEntity product = productRepository.save(p);
+        log.info("[ProductService.create] product SAVED id={}", product.getId());
 
         if (dto.getPrices() != null) {
             for (ProductPriceItemDto pr : dto.getPrices()) {
                 if (pr.getPriceListId() != null && pr.getPrice() != null) {
-                    priceListRepository.findById(pr.getPriceListId()).ifPresent(priceList -> {
-                        ProductPriceEntity pe = ProductPriceEntity.builder()
-                                .product(product)
-                                .priceList(priceList)
-                                .price(pr.getPrice())
-                                .currency(pr.getCurrency() != null ? pr.getCurrency() : "MXN")
-                                .build();
-                        product.getPrices().add(pe);
-                    });
+                    var optPriceList = priceListRepository.findById(pr.getPriceListId());
+                    if (optPriceList.isEmpty()) {
+                        log.warn("[ProductService.create] product_prices: priceListId NOT FOUND in DB: {}", pr.getPriceListId());
+                        continue;
+                    }
+                    var priceList = optPriceList.get();
+                    ProductPriceEntity pe = ProductPriceEntity.builder()
+                            .product(product)
+                            .priceList(priceList)
+                            .price(pr.getPrice())
+                            .currency(pr.getCurrency() != null ? pr.getCurrency() : "MXN")
+                            .build();
+                    product.getPrices().add(pe);
+                    productPriceRepository.saveAndFlush(pe);
+                    log.info("[ProductService.create] product_prices: SAVED productId={}, priceListId={}, priceListName={}, price={}",
+                            product.getId(), priceList.getId(), priceList.getName(), pr.getPrice());
+                } else {
+                    log.warn("[ProductService.create] product_prices: SKIP entry (priceListId or price null) priceListId={}, price={}",
+                            pr.getPriceListId(), pr.getPrice());
                 }
             }
         }
+
         if (dto.getLocationStocks() != null) {
             for (ProductLocationStockDto ls : dto.getLocationStocks()) {
                 if (ls.getLocationId() != null) {
-                    locationRepository.findById(ls.getLocationId()).ifPresent(loc -> {
-                        ProductLocationStockEntity se = ProductLocationStockEntity.builder()
-                                .product(product)
-                                .location(loc)
-                                .quantity(ls.getQuantity() != null ? ls.getQuantity() : 0)
-                                .minQuantity(ls.getMinQuantity() != null ? ls.getMinQuantity() : 0)
-                                .build();
-                        product.getLocationStocks().add(se);
-                    });
+                    var optLoc = locationRepository.findById(ls.getLocationId());
+                    if (optLoc.isEmpty()) {
+                        log.warn("[ProductService.create] product_location_stock: locationId NOT FOUND: {}", ls.getLocationId());
+                        continue;
+                    }
+                    var loc = optLoc.get();
+                    ProductLocationStockEntity se = ProductLocationStockEntity.builder()
+                            .product(product)
+                            .location(loc)
+                            .quantity(ls.getQuantity() != null ? ls.getQuantity() : 0)
+                            .minQuantity(ls.getMinQuantity() != null ? ls.getMinQuantity() : 0)
+                            .build();
+                    product.getLocationStocks().add(se);
+                    log.info("[ProductService.create] product_location_stock: ADDED (cascade) productId={}, locationId={}, quantity={}",
+                            product.getId(), loc.getId(), se.getQuantity());
                 }
             }
         }
+
         if (dto.getVariants() != null) {
             for (ProductVariantDto vdto : dto.getVariants()) {
                 ProductVariantEntity ve = ProductVariantEntity.builder()
@@ -114,9 +173,13 @@ public class ProductService {
                     }
                 }
                 product.getVariants().add(ve);
+                log.info("[ProductService.create] product_variants: ADDED (cascade) productId={}, sku={}, optionsCount={}",
+                        product.getId(), ve.getSku(), ve.getOptions() != null ? ve.getOptions().size() : 0);
             }
         }
-        productRepository.save(product);
+
+        productRepository.saveAndFlush(product);
+        log.info("[ProductService.create] product flush done, returning getById");
         return getById(product.getId());
     }
 
@@ -131,12 +194,14 @@ public class ProductService {
             for (ProductPriceItemDto pr : dto.getPrices()) {
                 if (pr.getPriceListId() != null && pr.getPrice() != null) {
                     priceListRepository.findById(pr.getPriceListId()).ifPresent(priceList -> {
-                        product.getPrices().add(ProductPriceEntity.builder()
+                        ProductPriceEntity pe = ProductPriceEntity.builder()
                                 .product(product)
                                 .priceList(priceList)
                                 .price(pr.getPrice())
                                 .currency(pr.getCurrency() != null ? pr.getCurrency() : "MXN")
-                                .build());
+                                .build();
+                        product.getPrices().add(pe);
+                        productPriceRepository.saveAndFlush(pe);
                     });
                 }
             }
