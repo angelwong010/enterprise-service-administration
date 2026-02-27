@@ -23,5 +23,11 @@ public interface SaleRepository extends JpaRepository<SaleEntity, UUID> {
 
     Optional<SaleEntity> findTopByOrderBySaleNumberDesc();
 
+    Optional<SaleEntity> findBySaleNumber(Integer saleNumber);
+
     long countByClientId(UUID clientId);
+
+    long countByPaymentStatus(String paymentStatus);
+
+    long countByStatus(String status);
 }
