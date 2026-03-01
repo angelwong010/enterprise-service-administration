@@ -1,0 +1,16 @@
+---
+description: Convenciones Java y Spring Boot para enterprise-service-administration
+globs: "**/*.java"
+alwaysApply: false
+---
+
+# Backend Java / Spring Boot
+
+- Paquete base: `com.hvati.administration`.
+- Controllers: `@RestController`, `@RequestMapping` con prefijo `/api/apps/...`.
+- Servicios: interfaces si hay varias implementaciones; inyección por constructor (`@RequiredArgsConstructor`).
+- DTOs: en `dto`, inmutables cuando sea posible; usar Lombok `@Builder`, `@Data` o getters/setters según convención del módulo.
+- No devolver entidades JPA; mapear a DTOs (por ejemplo con `UserMapper`).
+- Validación: `@Valid` en `@RequestBody` y anotaciones `jakarta.validation` en DTOs.
+- Excepciones: manejar con `@ControllerAdvice` si existe; respuestas HTTP coherentes.
+- Configuración sensible (Keycloak, DB): variables de entorno o `application-*.yml`, no valores fijos en código.

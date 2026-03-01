@@ -64,6 +64,9 @@ public class UserController {
         log.info("PATCH /contact received - id='{}', contact.id='{}'",
                 request.getId(),
                 request.getContact() != null ? request.getContact().getId() : "null");
+        if (request.getContact() == null) {
+            return ResponseEntity.badRequest().build();
+        }
         return ResponseEntity.ok(userService.updateUser(request.getId(), request.getContact()));
     }
 
