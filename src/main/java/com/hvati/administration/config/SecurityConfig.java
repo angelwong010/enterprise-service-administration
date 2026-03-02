@@ -2,8 +2,11 @@ package com.hvati.administration.config;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import jakarta.servlet.http.HttpServletResponse;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.http.HttpMethod;
 import org.springframework.http.MediaType;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
@@ -20,6 +23,7 @@ import java.util.Map;
 @EnableWebSecurity
 public class SecurityConfig {
 
+    private static final Logger log = LoggerFactory.getLogger(SecurityConfig.class);
     private final CorsConfigurationSource corsConfigurationSource;
 
     public SecurityConfig(CorsConfigurationSource corsConfigurationSource) {
@@ -33,6 +37,7 @@ public class SecurityConfig {
             .cors(cors -> cors.configurationSource(corsConfigurationSource))
             .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
             .authorizeHttpRequests(auth -> auth
+                .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
                 .requestMatchers(
                     "/swagger-ui/**",
                     "/api-docs/**",
@@ -57,6 +62,11 @@ public class SecurityConfig {
     @Bean
     public AuthenticationEntryPoint apiAuthenticationEntryPoint() {
         return (request, response, authException) -> {
+            log.warn("JWT auth failed: {} - {}", request.getRequestURI(),
+                authException != null ? authException.getMessage() : "null");
+            if (authException != null && authException.getCause() != null) {
+                log.warn("JWT auth cause: {}", authException.getCause().getMessage());
+            }
             response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
             response.setContentType(MediaType.APPLICATION_JSON_VALUE);
             response.setCharacterEncoding("UTF-8");

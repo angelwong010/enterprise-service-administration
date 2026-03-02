@@ -5,6 +5,7 @@ import com.hvati.administration.entity.BrandEntity;
 import com.hvati.administration.mapper.ProductMapper;
 import com.hvati.administration.repository.BrandRepository;
 import lombok.RequiredArgsConstructor;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -41,10 +42,19 @@ public class BrandService {
     @Transactional
     public BrandDto findOrCreateByName(String name) {
         if (name == null || name.isBlank()) return null;
-        return brandRepository.findByNameContainingIgnoreCase(name.trim()).stream()
-                .findFirst()
+        final String trimmed = name.trim();
+        return brandRepository.findByNameIgnoreCase(trimmed)
                 .map(productMapper::toBrandDto)
-                .orElseGet(() -> create(BrandDto.builder().name(name.trim()).build()));
+                .orElseGet(() -> {
+                    try {
+                        return create(BrandDto.builder().name(trimmed).build());
+                    } catch (DataIntegrityViolationException ex) {
+                        // Si el índice único ya existe y hubo carrera, devolvemos el existente.
+                        return brandRepository.findByNameIgnoreCase(trimmed)
+                                .map(productMapper::toBrandDto)
+                                .orElseThrow(() -> ex);
+                    }
+                });
     }
 
     @Transactional
@@ -52,9 +62,14 @@ public class BrandService {
         if (dto.getName() == null || dto.getName().isBlank()) {
             throw new IllegalArgumentException("El nombre de marca es obligatorio");
         }
-        BrandEntity e = BrandEntity.builder().name(dto.getName().trim()).build();
-        e = brandRepository.save(e);
-        return productMapper.toBrandDto(e);
+        final String trimmed = dto.getName().trim();
+        return brandRepository.findByNameIgnoreCase(trimmed)
+                .map(productMapper::toBrandDto)
+                .orElseGet(() -> {
+                    BrandEntity e = BrandEntity.builder().name(trimmed).build();
+                    e = brandRepository.save(e);
+                    return productMapper.toBrandDto(e);
+                });
     }
 
     @Transactional
@@ -62,7 +77,13 @@ public class BrandService {
         BrandEntity e = brandRepository.findById(id)
                 .orElseThrow(() -> new IllegalArgumentException("Marca no encontrada: " + id));
         if (dto.getName() != null && !dto.getName().isBlank()) {
-            e.setName(dto.getName().trim());
+            final String trimmed = dto.getName().trim();
+            brandRepository.findByNameIgnoreCase(trimmed).ifPresent(other -> {
+                if (!other.getId().equals(id)) {
+                    throw new IllegalArgumentException("Ya existe una marca con ese nombre.");
+                }
+            });
+            e.setName(trimmed);
         }
         e = brandRepository.save(e);
         return productMapper.toBrandDto(e);

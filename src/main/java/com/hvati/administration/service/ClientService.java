@@ -6,6 +6,7 @@ import com.hvati.administration.mapper.ClientMapper;
 import com.hvati.administration.repository.*;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -127,13 +128,19 @@ public class ClientService {
         if (name == null || name.isBlank()) {
             return null;
         }
-        String trimmed = name.trim();
+        final String trimmed = name.trim();
         return priceListRepository.findByNameIgnoreCase(trimmed)
                 .map(clientMapper::toPriceListDto)
                 .orElseGet(() -> {
-                    PriceListEntity e = PriceListEntity.builder().name(trimmed).build();
-                    e = priceListRepository.save(e);
-                    return clientMapper.toPriceListDto(e);
+                    try {
+                        PriceListEntity e = PriceListEntity.builder().name(trimmed).build();
+                        e = priceListRepository.save(e);
+                        return clientMapper.toPriceListDto(e);
+                    } catch (DataIntegrityViolationException ex) {
+                        return priceListRepository.findByNameIgnoreCase(trimmed)
+                                .map(clientMapper::toPriceListDto)
+                                .orElseThrow(() -> ex);
+                    }
                 });
     }
 

@@ -3,6 +3,7 @@ package com.hvati.administration.repository;
 import com.hvati.administration.entity.ProductEntity;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
 import java.util.List;
@@ -44,4 +45,26 @@ public interface ProductRepository extends JpaRepository<ProductEntity, UUID> {
             "OR LOWER(p.barcode) LIKE LOWER(CONCAT('%', :q, '%')) " +
             "ORDER BY p.name")
     List<ProductEntity> searchWithCategoryBrandAndPrices(String q);
+
+    Optional<ProductEntity> findFirstBySkuIgnoreCase(String sku);
+
+    Optional<ProductEntity> findFirstByBarcodeIgnoreCase(String barcode);
+
+    /**
+     * Para upsert en carga masiva cuando no hay SKU/Barcode:
+     * busca por (name, brand_id) normalizando name (lower/trim) y aceptando brand null.
+     */
+    @Query("""
+        SELECT p FROM ProductEntity p
+        WHERE LOWER(TRIM(p.name)) = LOWER(TRIM(:name))
+          AND (
+            (:brandId IS NULL AND p.brand IS NULL)
+            OR (p.brand IS NOT NULL AND p.brand.id = :brandId)
+          )
+        ORDER BY p.id
+        """)
+    Optional<ProductEntity> findFirstForUpsertByNameAndBrand(
+            @Param("name") String name,
+            @Param("brandId") UUID brandId
+    );
 }

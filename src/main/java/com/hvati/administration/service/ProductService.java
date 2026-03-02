@@ -66,6 +66,49 @@ public class ProductService {
     public ProductDto create(ProductDto dto) {
         log.info("[ProductService.create] product name={}", dto.getName());
 
+        // Idempotencia: si se vuelve a subir el mismo listado (carga masiva),
+        // no creamos duplicados. Si existe por SKU o barcode, actualizamos el existente.
+        final String skuKey =
+                dto.getSku() != null && !dto.getSku().isBlank() ? dto.getSku().trim() : null;
+        if (skuKey != null) {
+            var existing = productRepository.findFirstBySkuIgnoreCase(skuKey);
+            if (existing.isPresent()) {
+                log.info("[ProductService.create] UPSERT by SKU. existingId={}, sku={}", existing.get().getId(), skuKey);
+                return update(existing.get().getId(), dto);
+            }
+        }
+
+        final String barcodeKey =
+                dto.getBarcode() != null && !dto.getBarcode().isBlank() ? dto.getBarcode().trim() : null;
+        if (barcodeKey != null) {
+            var existing = productRepository.findFirstByBarcodeIgnoreCase(barcodeKey);
+            if (existing.isPresent()) {
+                log.info("[ProductService.create] UPSERT by BARCODE. existingId={}, barcode={}", existing.get().getId(), barcodeKey);
+                return update(existing.get().getId(), dto);
+            }
+        }
+
+        // Si no hay SKU/Barcode, intentamos deduplicar por (nombre + marca)
+        final String nameKey =
+                dto.getName() != null && !dto.getName().isBlank() ? dto.getName().trim() : null;
+        if (nameKey != null) {
+            UUID brandId = null;
+            if (dto.getBrandId() != null) {
+                brandId = dto.getBrandId();
+            } else if (dto.getBrandName() != null && !dto.getBrandName().isBlank()) {
+                // Asegura que exista la marca y nos devuelve su ID para match consistente
+                var brand = brandService.findOrCreateByName(dto.getBrandName());
+                brandId = brand != null ? brand.getId() : null;
+            }
+
+            var existing = productRepository.findFirstForUpsertByNameAndBrand(nameKey, brandId);
+            if (existing.isPresent()) {
+                log.info("[ProductService.create] UPSERT by (NAME+BRAND). existingId={}, name={}, brandId={}",
+                        existing.get().getId(), nameKey, brandId);
+                return update(existing.get().getId(), dto);
+            }
+        }
+
         // Log incoming DTO for carga masiva
         if (dto.getPrices() == null) {
             log.info("[ProductService.create] product_prices: dto.prices is NULL");
