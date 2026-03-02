@@ -6,9 +6,9 @@ spring:
     name: enterprise-service-administration
 
   datasource:
-    url: ${DB_URL}
-    username: ${DB_USERNAME}
-    password: ${DB_PASSWORD}
+    url: ${DB_URL:jdbc:postgresql://localhost:5432/hvati_admin}
+    username: ${DB_USERNAME:postgres}
+    password: ${DB_PASSWORD:postgres}
     driver-class-name: org.postgresql.Driver
 
   jpa:
@@ -39,7 +39,7 @@ keycloak:
 
 app:
   cors:
-    allowed-origins: http://localhost:4200
+    allowed-origins: http://localhost:4200,https://hvati.cloud
 
 springdoc:
   api-docs:
