@@ -28,14 +28,14 @@ public class GlobalExceptionHandler {
         if (message.length() > 500) {
             message = message.substring(0, 497) + "...";
         }
-        log.warn("Validation failed: {}", message);
+        log.error("API error: validation failed - {}", message);
         return ResponseEntity.status(HttpStatus.BAD_REQUEST)
                 .body(buildErrorBody(HttpStatus.BAD_REQUEST, message));
     }
 
     @ExceptionHandler(HttpMessageNotReadableException.class)
     public ResponseEntity<Map<String, Object>> handleBadRequest(HttpMessageNotReadableException ex) {
-        log.warn("Bad request body: {}", ex.getMessage());
+        log.error("API error: bad request body - {}", ex.getMessage());
         String message = "El cuerpo de la petición no es válido. Verifica que los tipos de datos sean correctos (por ejemplo, categoría y marca deben ser IDs válidos).";
         return ResponseEntity.status(HttpStatus.BAD_REQUEST)
                 .body(buildErrorBody(HttpStatus.BAD_REQUEST, message));
@@ -43,12 +43,14 @@ public class GlobalExceptionHandler {
 
     @ExceptionHandler(ResourceNotFoundException.class)
     public ResponseEntity<Map<String, Object>> handleResourceNotFound(ResourceNotFoundException ex) {
+        log.error("API error: resource not found - {}", ex.getMessage());
         return ResponseEntity.status(HttpStatus.NOT_FOUND)
                 .body(buildErrorBody(HttpStatus.NOT_FOUND, ex.getMessage()));
     }
 
     @ExceptionHandler(NotFoundException.class)
     public ResponseEntity<Map<String, Object>> handleKeycloakNotFound(NotFoundException ex) {
+        log.error("API error: Keycloak resource not found - {}", ex.getMessage());
         return ResponseEntity.status(HttpStatus.NOT_FOUND)
                 .body(buildErrorBody(HttpStatus.NOT_FOUND, "Resource not found in Keycloak"));
     }
