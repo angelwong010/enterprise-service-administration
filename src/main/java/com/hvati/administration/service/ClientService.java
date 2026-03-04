@@ -51,6 +51,47 @@ public class ClientService {
         return toDtoWithOptionalSummary(client, true);
     }
 
+    /**
+     * Actualiza solo una dirección existente del cliente (PATCH semántico sobre la dirección).
+     */
+    @Transactional
+    public ClientDto updateClientAddress(UUID clientId, UUID addressId, ClientAddressDto dto) {
+        ClientEntity client = clientRepository.findById(clientId)
+                .orElseThrow(() -> new IllegalArgumentException("Cliente no encontrado: " + clientId));
+
+        ClientAddressEntity target = client.getAddresses().stream()
+                .filter(a -> addressId.equals(a.getId()))
+                .findFirst()
+                .orElseThrow(() -> new IllegalArgumentException("Dirección no encontrada: " + addressId));
+
+        if (dto.getAddressType() != null) target.setAddressType(dto.getAddressType());
+        if (dto.getStreet() != null) target.setStreet(dto.getStreet());
+        if (dto.getExteriorNumber() != null) target.setExteriorNumber(dto.getExteriorNumber());
+        if (dto.getInteriorNumber() != null) target.setInteriorNumber(dto.getInteriorNumber());
+        if (dto.getPostalCode() != null) target.setPostalCode(dto.getPostalCode());
+        if (dto.getColonia() != null) target.setColonia(dto.getColonia());
+        if (dto.getMunicipio() != null) target.setMunicipio(dto.getMunicipio());
+        if (dto.getCity() != null) target.setCity(dto.getCity());
+        if (dto.getState() != null) target.setState(dto.getState());
+        if (dto.getCountry() != null) target.setCountry(dto.getCountry());
+
+        clientRepository.save(client);
+        return getClientById(clientId);
+    }
+
+    /**
+     * Crea una nueva dirección para el cliente sin modificar las demás.
+     */
+    @Transactional
+    public ClientDto createClientAddress(UUID clientId, ClientAddressDto dto) {
+        ClientEntity client = clientRepository.findById(clientId)
+                .orElseThrow(() -> new IllegalArgumentException("Cliente no encontrado: " + clientId));
+        ClientAddressEntity address = mapAddressDtoToEntity(dto, client);
+        client.getAddresses().add(address);
+        clientRepository.save(client);
+        return getClientById(clientId);
+    }
+
     @Transactional
     public ClientDto createClient(ClientDto dto) {
         ClientEntity client = new ClientEntity();
@@ -74,12 +115,51 @@ public class ClientService {
         ClientEntity client = clientRepository.findById(id)
                 .orElseThrow(() -> new IllegalArgumentException("Cliente no encontrado: " + id));
         mapDtoToEntity(dto, client);
+        // Actualizar solo los datos de dirección que vienen en el DTO,
+        // sin borrar otras direcciones existentes (por ejemplo, de envío).
+        if (dto.getAddresses() != null && !dto.getAddresses().isEmpty()) {
+            // Tomamos la primera dirección del DTO como "principal" a actualizar
+            ClientAddressDto addrDto = dto.getAddresses().get(0);
 
-        client.getAddresses().clear();
-        if (dto.getAddresses() != null) {
-            for (ClientAddressDto a : dto.getAddresses()) {
-                ClientAddressEntity addr = mapAddressDtoToEntity(a, client);
-                client.getAddresses().add(addr);
+            // Buscar una dirección existente del cliente con el mismo id (si viene)
+            ClientAddressEntity target = null;
+            if (addrDto.getId() != null) {
+                for (ClientAddressEntity existing : client.getAddresses()) {
+                    if (addrDto.getId().equals(existing.getId())) {
+                        target = existing;
+                        break;
+                    }
+                }
+            }
+
+            // Si no se encontró por id, intentamos localizar la dirección MAIN
+            if (target == null) {
+                for (ClientAddressEntity existing : client.getAddresses()) {
+                    if ("MAIN".equalsIgnoreCase(existing.getAddressType())) {
+                        target = existing;
+                        break;
+                    }
+                }
+            }
+
+            // Si sigue sin existir, creamos una nueva dirección principal
+            if (target == null) {
+                target = mapAddressDtoToEntity(addrDto, client);
+                client.getAddresses().add(target);
+            } else {
+                // Actualizar campos de la dirección existente sin eliminar otras
+                target.setAddressType(
+                        addrDto.getAddressType() != null ? addrDto.getAddressType() : target.getAddressType());
+                target.setStreet(addrDto.getStreet());
+                target.setExteriorNumber(addrDto.getExteriorNumber());
+                target.setInteriorNumber(addrDto.getInteriorNumber());
+                target.setPostalCode(addrDto.getPostalCode());
+                target.setColonia(addrDto.getColonia());
+                target.setMunicipio(addrDto.getMunicipio());
+                target.setCity(addrDto.getCity());
+                target.setState(addrDto.getState());
+                target.setCountry(
+                        addrDto.getCountry() != null ? addrDto.getCountry() : target.getCountry());
             }
         }
 

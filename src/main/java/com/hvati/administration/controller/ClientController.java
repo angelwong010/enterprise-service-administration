@@ -1,5 +1,6 @@
 package com.hvati.administration.controller;
 
+import com.hvati.administration.dto.ClientAddressDto;
 import com.hvati.administration.dto.ClientDto;
 import com.hvati.administration.dto.PriceListDto;
 import com.hvati.administration.dto.SaleSummaryDto;
@@ -33,6 +34,21 @@ public class ClientController {
     @GetMapping("/{id}")
     public ResponseEntity<ClientDto> getClientById(@PathVariable UUID id) {
         return ResponseEntity.ok(clientService.getClientById(id));
+    }
+
+    @PatchMapping("/{clientId}/addresses/{addressId}")
+    public ResponseEntity<ClientDto> updateClientAddress(
+            @PathVariable UUID clientId,
+            @PathVariable UUID addressId,
+            @Valid @RequestBody ClientAddressDto dto) {
+        return ResponseEntity.ok(clientService.updateClientAddress(clientId, addressId, dto));
+    }
+
+    @PostMapping("/{clientId}/addresses")
+    public ResponseEntity<ClientDto> createClientAddress(
+            @PathVariable UUID clientId,
+            @Valid @RequestBody ClientAddressDto dto) {
+        return ResponseEntity.ok(clientService.createClientAddress(clientId, dto));
     }
 
     @GetMapping("/{id}/sales")
