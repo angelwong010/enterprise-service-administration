@@ -8,6 +8,7 @@ import com.hvati.administration.mapper.QuotationMapper;
 import com.hvati.administration.repository.ClientRepository;
 import com.hvati.administration.repository.QuotationRepository;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -16,6 +17,7 @@ import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
+@Slf4j
 @Service
 @RequiredArgsConstructor
 public class QuotationService {
@@ -71,6 +73,75 @@ public class QuotationService {
 
         q = quotationRepository.save(q);
         return quotationMapper.toQuotationDto(quotationRepository.findById(q.getId()).orElse(q));
+    }
+
+    @Transactional
+    public Optional<QuotationDto> updateQuotation(UUID id, QuotationDto dto) {
+        log.info("[updateQuotation] START id={}, linesCount={}, subtotal={}, discount={}, total={}, clientId={}",
+                id, dto.getLines() != null ? dto.getLines().size() : 0,
+                dto.getSubtotal(), dto.getDiscount(), dto.getTotal(), dto.getClientId());
+        try {
+            Optional<QuotationEntity> opt = quotationRepository.findById(id);
+            if (opt.isEmpty()) {
+                log.warn("[updateQuotation] Quotation not found id={}", id);
+                return Optional.empty();
+            }
+            QuotationEntity q = opt.get();
+            log.info("[updateQuotation] Quotation found id={}, number={}, hasSale={}, currentLines={}",
+                    q.getId(), q.getNumber(), q.getSale() != null, q.getLines() != null ? q.getLines().size() : 0);
+            if (q.getSale() != null) {
+                throw new IllegalArgumentException("No se puede editar una cotización ya convertida en venta.");
+            }
+            q.setStatus(dto.getStatus() != null ? dto.getStatus() : q.getStatus());
+            q.setSubtotal(toBigDecimal(dto.getSubtotal(), BigDecimal.ZERO));
+            q.setDiscount(toBigDecimal(dto.getDiscount(), BigDecimal.ZERO));
+            q.setTotal(toBigDecimal(dto.getTotal(), BigDecimal.ZERO));
+            q.setClientName(dto.getClientName());
+            if (dto.getClientId() != null) {
+                clientRepository.findById(dto.getClientId()).ifPresent(q::setClient);
+            } else {
+                q.setClient(null);
+            }
+            log.info("[updateQuotation] Clearing lines (current size={})", q.getLines().size());
+            q.getLines().clear();
+            if (dto.getLines() != null) {
+                for (int i = 0; i < dto.getLines().size(); i++) {
+                    QuotationLineDto ldto = dto.getLines().get(i);
+                    log.debug("[updateQuotation] Line[{}] productName={}, quantity={}, unitPrice={}",
+                            i, ldto.getProductName(), ldto.getQuantity(), ldto.getUnitPrice());
+                    QuotationLineEntity line = new QuotationLineEntity();
+                    line.setQuotation(q);
+                    line.setProductId(ldto.getProductId());
+                    line.setProductName(ldto.getProductName() != null ? ldto.getProductName() : "");
+                    line.setIsShipping(Boolean.TRUE.equals(ldto.getIsShipping()));
+                    line.setUnitPrice(toBigDecimal(ldto.getUnitPrice(), BigDecimal.ZERO));
+                    line.setQuantity(toBigDecimal(ldto.getQuantity(), BigDecimal.ONE));
+                    line.setSubtotal(toBigDecimal(ldto.getSubtotal(), BigDecimal.ZERO));
+                    line.setPriceListId(ldto.getPriceListId());
+                    line.setPriceListName(ldto.getPriceListName());
+                    q.getLines().add(line);
+                }
+            }
+            log.info("[updateQuotation] Saving quotation, new lines count={}", q.getLines().size());
+            q = quotationRepository.save(q);
+            log.info("[updateQuotation] Saved, loading for response");
+            QuotationDto result = quotationMapper.toQuotationDto(quotationRepository.findById(q.getId()).orElse(q));
+            log.info("[updateQuotation] SUCCESS id={}", id);
+            return Optional.of(result);
+        } catch (Exception e) {
+            log.error("[updateQuotation] FAILED id={}, error={}", id, e.getMessage(), e);
+            throw e;
+        }
+    }
+
+    private static BigDecimal toBigDecimal(Number n, BigDecimal defaultValue) {
+        if (n == null) return defaultValue;
+        if (n instanceof BigDecimal bd) return bd;
+        try {
+            return BigDecimal.valueOf(n.doubleValue());
+        } catch (Exception e) {
+            return defaultValue;
+        }
     }
 
     /**

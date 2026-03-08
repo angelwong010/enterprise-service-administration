@@ -232,7 +232,11 @@ public class ProductService {
                 .orElseThrow(() -> new IllegalArgumentException("Producto no encontrado: " + id));
         mapDtoToProduct(dto, product);
 
+        // Eliminar precios existentes en BD antes de insertar los nuevos, para no violar
+        // la restricción única (product_id, price_list_id).
+        productPriceRepository.deleteByProductId(product.getId());
         product.getPrices().clear();
+
         if (dto.getPrices() != null) {
             for (ProductPriceItemDto pr : dto.getPrices()) {
                 if (pr.getPriceListId() != null && pr.getPrice() != null) {

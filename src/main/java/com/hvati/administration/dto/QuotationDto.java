@@ -2,6 +2,7 @@ package com.hvati.administration.dto;
 
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonProperty;
+import com.fasterxml.jackson.databind.annotation.JsonDeserialize;
 import lombok.*;
 
 import java.math.BigDecimal;
@@ -24,8 +25,11 @@ public class QuotationDto {
 
     private String clientName;
     private List<QuotationLineDto> lines;
+    @JsonDeserialize(using = FlexibleBigDecimalDeserializer.class)
     private BigDecimal subtotal;
+    @JsonDeserialize(using = FlexibleBigDecimalDeserializer.class)
     private BigDecimal discount;
+    @JsonDeserialize(using = FlexibleBigDecimalDeserializer.class)
     private BigDecimal total;
     private String status; // draft, sent, accepted, rejected
 

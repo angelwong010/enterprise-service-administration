@@ -8,4 +8,7 @@ import java.util.UUID;
 
 @Repository
 public interface ProductPriceRepository extends JpaRepository<ProductPriceEntity, UUID> {
+
+    /** Elimina todos los precios del producto. Usado en update() para evitar violar unique (product_id, price_list_id). */
+    void deleteByProductId(UUID productId);
 }

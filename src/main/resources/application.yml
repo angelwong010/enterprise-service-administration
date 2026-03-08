@@ -1,6 +1,18 @@
 server:
   port: 8080
 
+# Logs: nivel por paquete y formato en consola
+logging:
+  level:
+    root: INFO
+    com.hvati.administration: INFO          # Tus servicios y controllers (cambia a DEBUG para más detalle)
+    com.hvati.administration.service: INFO # Incluye [updateQuotation], etc.
+    com.hvati.administration.controller: INFO
+    org.springframework.web: INFO
+    org.hibernate.SQL: INFO               # Opcional: ver SQL generado (quita o pon WARN en producción)
+  pattern:
+    console: "%d{yyyy-MM-dd HH:mm:ss.SSS} [%thread] %-5level %logger{36} - %msg%n"
+
 spring:
   application:
     name: enterprise-service-administration

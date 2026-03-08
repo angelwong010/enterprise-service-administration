@@ -4,12 +4,14 @@ import com.hvati.administration.dto.QuotationDto;
 import com.hvati.administration.dto.SaleDto;
 import com.hvati.administration.service.QuotationService;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
 import java.util.UUID;
 
+@Slf4j
 @RestController
 @RequestMapping("/api/apps/quotations")
 @RequiredArgsConstructor
@@ -33,6 +35,20 @@ public class QuotationsController {
     public ResponseEntity<QuotationDto> createQuotation(@RequestBody QuotationDto dto) {
         QuotationDto created = quotationService.createQuotation(dto);
         return ResponseEntity.ok(created);
+    }
+
+    @PatchMapping("/{id}")
+    public ResponseEntity<QuotationDto> updateQuotation(@PathVariable UUID id, @RequestBody QuotationDto dto) {
+        log.info("[PATCH quotations] id={}, body lines={}, subtotal={}, total={}",
+                id, dto.getLines() != null ? dto.getLines().size() : 0, dto.getSubtotal(), dto.getTotal());
+        try {
+            return quotationService.updateQuotation(id, dto)
+                    .map(ResponseEntity::ok)
+                    .orElse(ResponseEntity.notFound().build());
+        } catch (Exception e) {
+            log.error("[PATCH quotations] id={}, exception: {}", id, e.getMessage(), e);
+            throw e;
+        }
     }
 
     @PostMapping("/{id}/convert-to-sale")

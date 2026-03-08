@@ -29,7 +29,7 @@ public class SaleEntity {
     private Integer saleNumber;
 
     @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "client_id", nullable = false)
+    @JoinColumn(name = "client_id")  // nullable: al borrar el cliente se pone NULL; la venta conserva client_name
     private ClientEntity client;
 
     @Column(nullable = false, precision = 15, scale = 2)

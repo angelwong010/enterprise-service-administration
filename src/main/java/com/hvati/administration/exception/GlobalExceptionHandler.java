@@ -55,26 +55,52 @@ public class GlobalExceptionHandler {
                 .body(buildErrorBody(HttpStatus.NOT_FOUND, "Resource not found in Keycloak"));
     }
 
+    @ExceptionHandler(IllegalArgumentException.class)
+    public ResponseEntity<Map<String, Object>> handleIllegalArgument(IllegalArgumentException ex) {
+        log.warn("API error: bad request - {}", ex.getMessage());
+        return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                .body(buildErrorBody(HttpStatus.BAD_REQUEST, ex.getMessage()));
+    }
+
     @ExceptionHandler(RuntimeException.class)
     public ResponseEntity<Map<String, Object>> handleRuntimeException(RuntimeException ex) {
-        log.error("Unexpected error: {}", ex.getMessage(), ex);
+        log.error("Unexpected error: {} - {}", ex.getClass().getSimpleName(), ex.getMessage(), ex);
+        String message = ex.getMessage() != null ? ex.getMessage() : ex.getClass().getSimpleName();
+        Throwable cause = ex.getCause();
+        if (cause != null && cause.getMessage() != null) {
+            message = message + " (cause: " + cause.getMessage() + ")";
+        }
         return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
-                .body(buildErrorBody(HttpStatus.INTERNAL_SERVER_ERROR, ex.getMessage()));
+                .body(buildErrorBodyWithType(HttpStatus.INTERNAL_SERVER_ERROR, message, ex.getClass().getSimpleName()));
     }
 
     @ExceptionHandler(Exception.class)
     public ResponseEntity<Map<String, Object>> handleGenericException(Exception ex) {
-        log.error("Unexpected error: {}", ex.getMessage(), ex);
+        log.error("Unexpected error: {} - {}", ex.getClass().getSimpleName(), ex.getMessage(), ex);
+        String message = ex.getMessage() != null && !ex.getMessage().isBlank()
+                ? ex.getMessage()
+                : "An unexpected error occurred";
+        Throwable cause = ex.getCause();
+        if (cause != null && cause.getMessage() != null) {
+            message = message + " (cause: " + cause.getMessage() + ")";
+        }
         return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
-                .body(buildErrorBody(HttpStatus.INTERNAL_SERVER_ERROR, "An unexpected error occurred"));
+                .body(buildErrorBodyWithType(HttpStatus.INTERNAL_SERVER_ERROR, message, ex.getClass().getSimpleName()));
     }
 
     private Map<String, Object> buildErrorBody(HttpStatus status, String message) {
-        return Map.of(
-                "timestamp", LocalDateTime.now().toString(),
-                "status", status.value(),
-                "error", status.getReasonPhrase(),
-                "message", message
-        );
+        return buildErrorBodyWithType(status, message, null);
+    }
+
+    private Map<String, Object> buildErrorBodyWithType(HttpStatus status, String message, String exceptionType) {
+        Map<String, Object> body = new java.util.LinkedHashMap<>();
+        body.put("timestamp", LocalDateTime.now().toString());
+        body.put("status", status.value());
+        body.put("error", status.getReasonPhrase());
+        body.put("message", message);
+        if (exceptionType != null) {
+            body.put("exceptionType", exceptionType);
+        }
+        return body;
     }
 }
